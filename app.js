@@ -14,9 +14,10 @@ const swaggerOptions = {
     info: {
       title: 'API Bancaire Teresa - ICT304',
       version: '1.0.0',
-      description: 'Système de gestion de comptes et transactions bancaires.',
+      description: 'Système de gestion de comptes avec tests de sécurité et audit.',
     },
     servers: [
+      { url: 'https://api-bancaire-teresa.onrender.com', description: 'Serveur Production' },
       { url: 'http://localhost:3000', description: 'Serveur Local' },
     ],
   },
@@ -35,22 +36,22 @@ let transactions = [];
 /**
  * @swagger
  * /comptes:
- *   post:
- *     summary: Créer un nouveau compte
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               titulaire:
- *                 type: string
- *               soldeInitial:
- *                 type: number
- *     responses:
- *       201:
- *         description: Compte créé
+ * post:
+ * summary: Créer un nouveau compte
+ * requestBody:
+ * required: true
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * properties:
+ * titulaire:
+ * type: string
+ * soldeInitial:
+ * type: number
+ * responses:
+ * 201:
+ * description: Compte créé avec succès
  */
 app.post('/comptes', (req, res) => {
     const { titulaire, soldeInitial } = req.body;
@@ -65,6 +66,7 @@ app.post('/comptes', (req, res) => {
         creeLe: new Date().toISOString()
     };
     comptes.push(nouveauCompte);
+    
     if (solde > 0) {
         transactions.push({
             id: transactions.length + 1,
@@ -82,11 +84,11 @@ app.post('/comptes', (req, res) => {
 /**
  * @swagger
  * /comptes:
- *   get:
- *     summary: Liste tous les comptes
- *     responses:
- *       200:
- *         description: Succès
+ * get:
+ * summary: Liste tous les comptes
+ * responses:
+ * 200:
+ * description: Succès
  */
 app.get('/comptes', (req, res) => {
     res.json(comptes);
@@ -94,102 +96,116 @@ app.get('/comptes', (req, res) => {
 
 /**
  * @swagger
- * /comptes/{id}:
- *   get:
- *     summary: Détails d'un compte
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Succès
- */
-app.get('/comptes/:id', (req, res) => {
-    const compte = comptes.find(c => c.id === parseInt(req.params.id));
-    if (!compte) return res.status(404).json({ erreur: "Compte non trouvé." });
-    res.json(compte);
-});
-
-/**
- * @swagger
  * /comptes/{id}/depot:
- *   post:
- *     summary: Faire un dépôt
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               montant:
- *                 type: number
- *     responses:
- *       200:
- *         description: Dépôt réussi
+ * post:
+ * summary: Faire un dépôt (Test Positif)
+ * parameters:
+ * - in: path
+ * name: id
+ * required: true
+ * schema:
+ * type: integer
+ * requestBody:
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * properties:
+ * montant:
+ * type: number
+ * responses:
+ * 200:
+ * description: Dépôt réussi
  */
 app.post('/comptes/:id/depot', (req, res) => {
-    const compte = comptes.find(c => c.id === parseInt(req.params.id));
-    if (!compte) return res.status(404).json({ erreur: "Compte non trouvé." });
+    const id = parseInt(req.params.id);
     const { montant } = req.body;
+    const compte = comptes.find(c => c.id === id);
+
+    if (!compte) return res.status(404).json({ erreur: "Compte non trouvé." });
+    if (!montant || montant <= 0) return res.status(400).json({ erreur: "Montant invalide." });
+
     compte.solde += montant;
+
+    transactions.push({
+        id: transactions.length + 1,
+        compteId: id,
+        type: 'depot',
+        montant: montant,
+        soldeApres: compte.solde,
+        description: 'Dépôt manuel',
+        date: new Date().toISOString()
+    });
+
     res.json({ message: "Dépôt réussi", nouveauSolde: compte.solde });
 });
 
 /**
  * @swagger
  * /comptes/{id}/retrait:
- *   post:
- *     summary: Faire un retrait
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               montant:
- *                 type: number
- *     responses:
- *       200:
- *         description: Retrait réussi
+ * post:
+ * summary: Faire un retrait (Vérification de sécurité)
+ * parameters:
+ * - in: path
+ * name: id
+ * required: true
+ * schema:
+ * type: integer
+ * requestBody:
+ * content:
+ * application/json:
+ * schema:
+ * type: object
+ * properties:
+ * montant:
+ * type: number
+ * responses:
+ * 200:
+ * description: Retrait réussi
+ * 400:
+ * description: Solde insuffisant (Échec du test de sécurité)
  */
 app.post('/comptes/:id/retrait', (req, res) => {
-    const compte = comptes.find(c => c.id === parseInt(req.params.id));
-    if (!compte) return res.status(404).json({ erreur: "Compte non trouvé." });
+    const id = parseInt(req.params.id);
     const { montant } = req.body;
-    if (compte.solde < montant) return res.status(400).json({ erreur: "Solde insuffisant" });
+    const compte = comptes.find(c => c.id === id);
+
+    if (!compte) return res.status(404).json({ erreur: "Compte non trouvé." });
+
+    // SÉCURITÉ : Vérification du solde pour éviter le découvert
+    if (compte.solde < montant) {
+        return res.status(400).json({ erreur: "Solde insuffisant" });
+    }
+
     compte.solde -= montant;
+
+    transactions.push({
+        id: transactions.length + 1,
+        compteId: id,
+        type: 'retrait',
+        montant: montant,
+        soldeApres: compte.solde,
+        description: 'Retrait manuel',
+        date: new Date().toISOString()
+    });
+
     res.json({ message: "Retrait réussi", nouveauSolde: compte.solde });
 });
 
 /**
  * @swagger
  * /comptes/{id}/transactions:
- *   get:
- *     summary: Historique des transactions
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Succès
+ * get:
+ * summary: Historique des transactions (Audit)
+ * parameters:
+ * - in: path
+ * name: id
+ * required: true
+ * schema:
+ * type: integer
+ * responses:
+ * 200:
+ * description: Liste des transactions trouvée
  */
 app.get('/comptes/:id/transactions', (req, res) => {
     const historique = transactions.filter(t => t.compteId === parseInt(req.params.id));
@@ -199,28 +215,30 @@ app.get('/comptes/:id/transactions', (req, res) => {
 /**
  * @swagger
  * /comptes/{id}:
- *   delete:
- *     summary: Supprimer un compte
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: Supprimé
+ * delete:
+ * summary: Supprimer un compte (Solde doit être à 0)
+ * parameters:
+ * - in: path
+ * name: id
+ * required: true
+ * responses:
+ * 200:
+ * description: Compte supprimé
+ * 400:
+ * description: Impossible de supprimer un compte avec un solde positif
  */
 app.delete('/comptes/:id', (req, res) => {
-    const index = comptes.findIndex(c => c.id === parseInt(req.params.id));
+    const id = parseInt(req.params.id);
+    const index = comptes.findIndex(c => c.id === id);
+
     if (index === -1) return res.status(404).json({ erreur: "Compte non trouvé." });
-    if (comptes[index].solde > 0) return res.status(400).json({ erreur: "Solde non nul" });
+    if (comptes[index].solde > 0) return res.status(400).json({ erreur: "Solde non nul. Videz le compte avant suppression." });
+
     comptes.splice(index, 1);
-    res.json({ message: "Compte supprimé" });
+    res.json({ message: "Compte supprimé avec succès." });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`\n🏦 Serveur lancé sur http://localhost:${PORT}`);
-    console.log(`📖 Swagger : http://localhost:${PORT}/api-docs`);
+    console.log(`🏦 Serveur lancé sur le port ${PORT}`);
 });
