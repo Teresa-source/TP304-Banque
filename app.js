@@ -1,13 +1,10 @@
 const express = require('express');
 const swaggerJsDoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
-const cors = require('cors'); // ← NOUVEAU
+const cors = require('cors');
 
 const app = express();
 
-// ─────────────────────────────────────────
-// CORS : doit être AVANT tout le reste
-// ─────────────────────────────────────────
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'DELETE', 'PUT', 'PATCH'],
@@ -27,25 +24,24 @@ const swaggerOptions = {
       version: '1.0.0',
       description: 'Système de gestion de comptes avec tests de sécurité et audit.',
     },
+    // ← UN SEUL serveur : toujours la prod
     servers: [
-      { url: 'https://api-bancaire-teresa.onrender.com', description: 'Serveur Production' },
-      { url: 'http://localhost:3000', description: 'Serveur Local' },
+      { url: 'https://api-bancaire-teresa.onrender.com', description: 'Serveur Production' }
     ],
-    schemes: ['https', 'http'], // ← NOUVEAU
   },
   apis: ['./app.js'],
 };
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
-// ← MODIFIÉ : ajout de validatorUrl: null pour désactiver le validateur externe
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
   swaggerOptions: {
     validatorUrl: null,
+    url: '/api-docs.json'  // ← force Swagger UI à charger depuis la même origine
   }
 }));
 
-// ← NOUVEAU : expose le JSON brut (utile pour debug)
+// Route qui expose le JSON Swagger
 app.get('/api-docs.json', (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.send(swaggerDocs);
@@ -187,7 +183,7 @@ app.post('/comptes/:id/depot', (req, res) => {
  *       200:
  *         description: Retrait réussi
  *       400:
- *         description: Solde insuffisant (Échec du test de sécurité)
+ *         description: Solde insuffisant
  */
 app.post('/comptes/:id/retrait', (req, res) => {
     const id = parseInt(req.params.id);
@@ -196,7 +192,6 @@ app.post('/comptes/:id/retrait', (req, res) => {
 
     if (!compte) return res.status(404).json({ erreur: "Compte non trouvé." });
 
-    // SÉCURITÉ : Vérification du solde pour éviter le découvert
     if (compte.solde < montant) {
         return res.status(400).json({ erreur: "Solde insuffisant" });
     }
@@ -267,4 +262,5 @@ app.delete('/comptes/:id', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🏦 Serveur lancé sur le port ${PORT}`);
+    console.log(`📘 Swagger : https://api-bancaire-teresa.onrender.com/api-docs`);
 });
