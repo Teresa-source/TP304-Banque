@@ -1,8 +1,19 @@
 const express = require('express');
 const swaggerJsDoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
+const cors = require('cors'); // ← NOUVEAU
 
 const app = express();
+
+// ─────────────────────────────────────────
+// CORS : doit être AVANT tout le reste
+// ─────────────────────────────────────────
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'DELETE', 'PUT', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // ─────────────────────────────────────────
@@ -20,12 +31,25 @@ const swaggerOptions = {
       { url: 'https://api-bancaire-teresa.onrender.com', description: 'Serveur Production' },
       { url: 'http://localhost:3000', description: 'Serveur Local' },
     ],
+    schemes: ['https', 'http'], // ← NOUVEAU
   },
-  apis: ['./app.js'], 
+  apis: ['./app.js'],
 };
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+
+// ← MODIFIÉ : ajout de validatorUrl: null pour désactiver le validateur externe
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
+  swaggerOptions: {
+    validatorUrl: null,
+  }
+}));
+
+// ← NOUVEAU : expose le JSON brut (utile pour debug)
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerDocs);
+});
 
 // ─────────────────────────────────────────
 // Base de données en mémoire
@@ -36,22 +60,22 @@ let transactions = [];
 /**
  * @swagger
  * /comptes:
- * post:
- * summary: Créer un nouveau compte
- * requestBody:
- * required: true
- * content:
- * application/json:
- * schema:
- * type: object
- * properties:
- * titulaire:
- * type: string
- * soldeInitial:
- * type: number
- * responses:
- * 201:
- * description: Compte créé avec succès
+ *   post:
+ *     summary: Créer un nouveau compte
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               titulaire:
+ *                 type: string
+ *               soldeInitial:
+ *                 type: number
+ *     responses:
+ *       201:
+ *         description: Compte créé avec succès
  */
 app.post('/comptes', (req, res) => {
     const { titulaire, soldeInitial } = req.body;
@@ -66,7 +90,7 @@ app.post('/comptes', (req, res) => {
         creeLe: new Date().toISOString()
     };
     comptes.push(nouveauCompte);
-    
+
     if (solde > 0) {
         transactions.push({
             id: transactions.length + 1,
@@ -84,11 +108,11 @@ app.post('/comptes', (req, res) => {
 /**
  * @swagger
  * /comptes:
- * get:
- * summary: Liste tous les comptes
- * responses:
- * 200:
- * description: Succès
+ *   get:
+ *     summary: Liste tous les comptes
+ *     responses:
+ *       200:
+ *         description: Succès
  */
 app.get('/comptes', (req, res) => {
     res.json(comptes);
@@ -97,25 +121,25 @@ app.get('/comptes', (req, res) => {
 /**
  * @swagger
  * /comptes/{id}/depot:
- * post:
- * summary: Faire un dépôt (Test Positif)
- * parameters:
- * - in: path
- * name: id
- * required: true
- * schema:
- * type: integer
- * requestBody:
- * content:
- * application/json:
- * schema:
- * type: object
- * properties:
- * montant:
- * type: number
- * responses:
- * 200:
- * description: Dépôt réussi
+ *   post:
+ *     summary: Faire un dépôt (Test Positif)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               montant:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Dépôt réussi
  */
 app.post('/comptes/:id/depot', (req, res) => {
     const id = parseInt(req.params.id);
@@ -143,27 +167,27 @@ app.post('/comptes/:id/depot', (req, res) => {
 /**
  * @swagger
  * /comptes/{id}/retrait:
- * post:
- * summary: Faire un retrait (Vérification de sécurité)
- * parameters:
- * - in: path
- * name: id
- * required: true
- * schema:
- * type: integer
- * requestBody:
- * content:
- * application/json:
- * schema:
- * type: object
- * properties:
- * montant:
- * type: number
- * responses:
- * 200:
- * description: Retrait réussi
- * 400:
- * description: Solde insuffisant (Échec du test de sécurité)
+ *   post:
+ *     summary: Faire un retrait (Vérification de sécurité)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               montant:
+ *                 type: number
+ *     responses:
+ *       200:
+ *         description: Retrait réussi
+ *       400:
+ *         description: Solde insuffisant (Échec du test de sécurité)
  */
 app.post('/comptes/:id/retrait', (req, res) => {
     const id = parseInt(req.params.id);
@@ -195,17 +219,17 @@ app.post('/comptes/:id/retrait', (req, res) => {
 /**
  * @swagger
  * /comptes/{id}/transactions:
- * get:
- * summary: Historique des transactions (Audit)
- * parameters:
- * - in: path
- * name: id
- * required: true
- * schema:
- * type: integer
- * responses:
- * 200:
- * description: Liste des transactions trouvée
+ *   get:
+ *     summary: Historique des transactions (Audit)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Liste des transactions trouvée
  */
 app.get('/comptes/:id/transactions', (req, res) => {
     const historique = transactions.filter(t => t.compteId === parseInt(req.params.id));
@@ -215,17 +239,19 @@ app.get('/comptes/:id/transactions', (req, res) => {
 /**
  * @swagger
  * /comptes/{id}:
- * delete:
- * summary: Supprimer un compte (Solde doit être à 0)
- * parameters:
- * - in: path
- * name: id
- * required: true
- * responses:
- * 200:
- * description: Compte supprimé
- * 400:
- * description: Impossible de supprimer un compte avec un solde positif
+ *   delete:
+ *     summary: Supprimer un compte (Solde doit être à 0)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Compte supprimé
+ *       400:
+ *         description: Impossible de supprimer un compte avec un solde positif
  */
 app.delete('/comptes/:id', (req, res) => {
     const id = parseInt(req.params.id);
